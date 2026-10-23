@@ -1,0 +1,18 @@
+# build output
+/bin/
+/server
+/excalidraw-server
+
+# local database
+/data/
+*.db
+*.db-shm
+*.db-wal
+
+# local environment
+.env
+
+# editors / OS
+.idea/
+.vscode/
+.DS_Store

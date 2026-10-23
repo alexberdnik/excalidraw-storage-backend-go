@@ -1,0 +1,17 @@
+services:
+  excalidraw-storage-backend:
+    build: .
+    image: excalidraw-storage-backend-go:latest
+    ports:
+      - "8080:8080"
+    environment:
+      SQLITE_PATH: /data/excalidraw.db
+      GLOBAL_PREFIX: /api/v2
+      BODY_LIMIT: 50mb
+      LOG_LEVEL: info
+    volumes:
+      - excalidraw-data:/data
+    restart: unless-stopped
+
+volumes:
+  excalidraw-data:
