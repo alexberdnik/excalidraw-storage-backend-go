@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1
 
-FROM golang:1.24-alpine AS build
+FROM golang:1.27-3-alpine AS build
 
 WORKDIR /src
 
@@ -11,7 +11,7 @@ COPY . .
 RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" -o /out/server .
 
 
-FROM alpine:3.21
+FROM alpine:latest
 
 RUN addgroup -S -g 10001 app \
     && adduser -S -u 10001 -G app app \
