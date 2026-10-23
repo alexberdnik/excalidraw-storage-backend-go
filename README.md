@@ -98,6 +98,15 @@ SQLITE_PATH=/var/lib/excalidraw/db.sqlite PORT=8080 ./bin/server
 
 ### Docker
 
+A prebuilt image is available on Docker Hub:
+[`alexberdnik/excalidraw-storage-backend-go`](https://hub.docker.com/r/alexberdnik/excalidraw-storage-backend-go).
+
+```sh
+docker run -p 8080:8080 -v excalidraw-data:/data alexberdnik/excalidraw-storage-backend-go
+```
+
+Or build it yourself:
+
 ```sh
 docker build -t excalidraw-storage-backend-go .
 docker run -p 8080:8080 -v excalidraw-data:/data excalidraw-storage-backend-go
