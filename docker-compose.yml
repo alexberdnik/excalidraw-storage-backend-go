@@ -5,7 +5,9 @@ services:
     ports:
       - "8080:8080"
     environment:
-      SQLITE_PATH: /data/excalidraw.db
+      STORE_BACKEND: sqlite            # or "files" to store one file per blob
+      SQLITE_PATH: /data/excalidraw.db # used when STORE_BACKEND=sqlite
+      FILES_PATH: /data/blobs          # used when STORE_BACKEND=files
       GLOBAL_PREFIX: /api/v2
       BODY_LIMIT: 50mb
       LOG_LEVEL: info

@@ -1,7 +1,7 @@
 // Command server runs the Excalidraw storage backend.
 //
-// It stores scenes, rooms and files in a single SQLite database and exposes
-// the same REST API as the original NestJS implementation.
+// It stores scenes, rooms and files either in a single SQLite database or as
+// plain files. STORE_BACKEND selects the backend.
 package main
 
 import (
@@ -16,9 +16,9 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/alswl/excalidraw-storage-backend-go/internal/api"
-	"github.com/alswl/excalidraw-storage-backend-go/internal/config"
-	"github.com/alswl/excalidraw-storage-backend-go/internal/store"
+	"github.com/alexberdnik/excalidraw-storage-backend-go/internal/api"
+	"github.com/alexberdnik/excalidraw-storage-backend-go/internal/config"
+	"github.com/alexberdnik/excalidraw-storage-backend-go/internal/store"
 )
 
 func main() {
@@ -26,6 +26,32 @@ func main() {
 		fmt.Fprintln(os.Stderr, "fatal:", err)
 		os.Exit(1)
 	}
+}
+
+func openStore(cfg config.Config) (store.Store, error) {
+	switch cfg.Backend {
+	case config.BackendFiles:
+		st, err := store.OpenFiles(cfg.FilesPath)
+		if err != nil {
+			return nil, err
+		}
+		return st, nil
+	case config.BackendSQLite:
+		st, err := store.OpenSQLite(cfg.SQLitePath)
+		if err != nil {
+			return nil, err
+		}
+		return st, nil
+	default:
+		return nil, fmt.Errorf("unknown store backend %q", cfg.Backend)
+	}
+}
+
+func storageLocation(cfg config.Config) string {
+	if cfg.Backend == config.BackendFiles {
+		return cfg.FilesPath
+	}
+	return cfg.SQLitePath
 }
 
 func run() error {
@@ -39,7 +65,7 @@ func run() error {
 	}))
 	slog.SetDefault(logger)
 
-	st, err := store.Open(cfg.SQLitePath)
+	st, err := openStore(cfg)
 	if err != nil {
 		return err
 	}
@@ -64,7 +90,8 @@ func run() error {
 	logger.Info("excalidraw storage backend listening",
 		"addr", listener.Addr().String(),
 		"prefix", prefix,
-		"database", cfg.SQLitePath,
+		"backend", string(cfg.Backend),
+		"location", storageLocation(cfg),
 		"body_limit_bytes", cfg.BodyLimit,
 	)
 

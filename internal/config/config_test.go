@@ -63,6 +63,40 @@ func TestParseBodyLimit(t *testing.T) {
 	}
 }
 
+func TestParseBackend(t *testing.T) {
+	tests := []struct {
+		in      string
+		want    Backend
+		wantErr bool
+	}{
+		{"sqlite", BackendSQLite, false},
+		{"SQLite", BackendSQLite, false},
+		{" files ", BackendFiles, false},
+		{"FILES", BackendFiles, false},
+		{"db", "", true},
+		{"file", "", true},
+		{"fs", "", true},
+		{"memory", "", true},
+		{"", "", true},
+	}
+	for _, tt := range tests {
+		got, err := ParseBackend(tt.in)
+		if tt.wantErr {
+			if err == nil {
+				t.Errorf("ParseBackend(%q) = %q, want error", tt.in, got)
+			}
+			continue
+		}
+		if err != nil {
+			t.Errorf("ParseBackend(%q) unexpected error: %v", tt.in, err)
+			continue
+		}
+		if got != tt.want {
+			t.Errorf("ParseBackend(%q) = %q, want %q", tt.in, got, tt.want)
+		}
+	}
+}
+
 func TestParseLogLevel(t *testing.T) {
 	tests := []struct {
 		in   string
@@ -86,7 +120,9 @@ func TestParseLogLevel(t *testing.T) {
 func TestFromEnvDefaults(t *testing.T) {
 	unsetenv(t, "PORT")
 	unsetenv(t, "GLOBAL_PREFIX")
+	unsetenv(t, "STORE_BACKEND")
 	unsetenv(t, "SQLITE_PATH")
+	unsetenv(t, "FILES_PATH")
 	unsetenv(t, "BODY_LIMIT")
 	unsetenv(t, "LOG_LEVEL")
 
@@ -100,8 +136,14 @@ func TestFromEnvDefaults(t *testing.T) {
 	if cfg.GlobalPrefix != DefaultGlobalPrefix {
 		t.Errorf("GlobalPrefix = %q, want %q", cfg.GlobalPrefix, DefaultGlobalPrefix)
 	}
+	if cfg.Backend != DefaultBackend {
+		t.Errorf("Backend = %q, want %q", cfg.Backend, DefaultBackend)
+	}
 	if cfg.SQLitePath != DefaultSQLitePath {
 		t.Errorf("SQLitePath = %q, want %q", cfg.SQLitePath, DefaultSQLitePath)
+	}
+	if cfg.FilesPath != DefaultFilesPath {
+		t.Errorf("FilesPath = %q, want %q", cfg.FilesPath, DefaultFilesPath)
 	}
 	if cfg.BodyLimit != DefaultBodyLimit {
 		t.Errorf("BodyLimit = %d, want %d", cfg.BodyLimit, DefaultBodyLimit)
@@ -117,7 +159,9 @@ func TestFromEnvDefaults(t *testing.T) {
 func TestFromEnvOverrides(t *testing.T) {
 	t.Setenv("PORT", "9090")
 	t.Setenv("GLOBAL_PREFIX", "custom/v1/")
+	t.Setenv("STORE_BACKEND", "files")
 	t.Setenv("SQLITE_PATH", "/tmp/excalidraw.db")
+	t.Setenv("FILES_PATH", "/tmp/blobs")
 	t.Setenv("BODY_LIMIT", "10mb")
 	t.Setenv("LOG_LEVEL", "debug")
 
@@ -131,8 +175,14 @@ func TestFromEnvOverrides(t *testing.T) {
 	if cfg.GlobalPrefix != "/custom/v1" {
 		t.Errorf("GlobalPrefix = %q, want %q", cfg.GlobalPrefix, "/custom/v1")
 	}
+	if cfg.Backend != BackendFiles {
+		t.Errorf("Backend = %q, want %q", cfg.Backend, BackendFiles)
+	}
 	if cfg.SQLitePath != "/tmp/excalidraw.db" {
 		t.Errorf("SQLitePath = %q", cfg.SQLitePath)
+	}
+	if cfg.FilesPath != "/tmp/blobs" {
+		t.Errorf("FilesPath = %q", cfg.FilesPath)
 	}
 	if cfg.BodyLimit != 10<<20 {
 		t.Errorf("BodyLimit = %d, want %d", cfg.BodyLimit, 10<<20)
@@ -151,6 +201,14 @@ func TestFromEnvEmptyPrefixDisablesIt(t *testing.T) {
 	}
 	if cfg.GlobalPrefix != "" {
 		t.Errorf("GlobalPrefix = %q, want empty", cfg.GlobalPrefix)
+	}
+}
+
+func TestFromEnvInvalidBackend(t *testing.T) {
+	t.Setenv("STORE_BACKEND", "redis")
+
+	if _, err := FromEnv(); err == nil {
+		t.Fatal("FromEnv() = nil error, want error for an unknown backend")
 	}
 }
 

@@ -12,24 +12,37 @@ import (
 const (
 	DefaultPort         = "8080"
 	DefaultGlobalPrefix = "/api/v2"
+	DefaultBackend      = BackendSQLite
 	DefaultSQLitePath   = "./data/excalidraw.db"
+	DefaultFilesPath    = "./data/blobs"
 	DefaultBodyLimit    = 50 << 20 // 50mb
 	DefaultLogLevel     = slog.LevelInfo
 )
 
+type Backend string
+
+const (
+	BackendSQLite Backend = "sqlite"
+	BackendFiles  Backend = "files"
+)
+
 type Config struct {
-	Port string
+	Port         string
 	GlobalPrefix string
-	SQLitePath string
-	BodyLimit int64
-	LogLevel slog.Level
+	Backend      Backend
+	SQLitePath   string
+	FilesPath    string
+	BodyLimit    int64
+	LogLevel     slog.Level
 }
 
 func FromEnv() (Config, error) {
 	cfg := Config{
 		Port:         DefaultPort,
 		GlobalPrefix: DefaultGlobalPrefix,
+		Backend:      DefaultBackend,
 		SQLitePath:   DefaultSQLitePath,
+		FilesPath:    DefaultFilesPath,
 		BodyLimit:    DefaultBodyLimit,
 		LogLevel:     DefaultLogLevel,
 	}
@@ -42,8 +55,20 @@ func FromEnv() (Config, error) {
 		cfg.GlobalPrefix = NormalizePrefix(v)
 	}
 
+	if v := os.Getenv("STORE_BACKEND"); v != "" {
+		backend, err := ParseBackend(v)
+		if err != nil {
+			return Config{}, fmt.Errorf("STORE_BACKEND: %w", err)
+		}
+		cfg.Backend = backend
+	}
+
 	if v := os.Getenv("SQLITE_PATH"); v != "" {
 		cfg.SQLitePath = v
+	}
+
+	if v := os.Getenv("FILES_PATH"); v != "" {
+		cfg.FilesPath = v
 	}
 
 	if v := os.Getenv("BODY_LIMIT"); v != "" {
@@ -80,6 +105,18 @@ func NormalizePrefix(prefix string) string {
 	}
 	prefix = strings.TrimRight(prefix, "/")
 	return prefix
+}
+
+func ParseBackend(value string) (Backend, error) {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case "sqlite":
+		return BackendSQLite, nil
+	case "files":
+		return BackendFiles, nil
+	default:
+		return "", fmt.Errorf("unknown backend %q (want %q or %q)",
+			strings.TrimSpace(value), BackendSQLite, BackendFiles)
+	}
 }
 
 func ParseLogLevel(value string) slog.Level {

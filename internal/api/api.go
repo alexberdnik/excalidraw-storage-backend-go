@@ -22,14 +22,14 @@ import (
 	"net/http"
 	"strconv"
 
-	"github.com/alswl/excalidraw-storage-backend-go/internal/config"
-	"github.com/alswl/excalidraw-storage-backend-go/internal/store"
+	"github.com/alexberdnik/excalidraw-storage-backend-go/internal/config"
+	"github.com/alexberdnik/excalidraw-storage-backend-go/internal/store"
 )
 
 const SceneIDLength = 16
 
 type API struct {
-	store      *store.Store
+	store      store.Store
 	logger     *slog.Logger
 	bodyLimit  int64
 	newSceneID func() (string, error)
@@ -46,7 +46,7 @@ func WithSceneIDGenerator(fn func() (string, error)) Option {
 	}
 }
 
-func New(cfg config.Config, st *store.Store, logger *slog.Logger, opts ...Option) http.Handler {
+func New(cfg config.Config, st store.Store, logger *slog.Logger, opts ...Option) http.Handler {
 	if logger == nil {
 		logger = slog.Default()
 	}

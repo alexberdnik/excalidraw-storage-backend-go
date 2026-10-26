@@ -24,7 +24,9 @@ USER app
 
 ENV PORT=8080 \
     GLOBAL_PREFIX=/api/v2 \
+    STORE_BACKEND=sqlite \
     SQLITE_PATH=/data/excalidraw.db \
+    FILES_PATH=/data/blobs \
     BODY_LIMIT=50mb \
     LOG_LEVEL=info
 

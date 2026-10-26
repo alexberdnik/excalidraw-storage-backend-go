@@ -7,23 +7,27 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
 	"testing"
 
-	"github.com/alswl/excalidraw-storage-backend-go/internal/api"
-	"github.com/alswl/excalidraw-storage-backend-go/internal/config"
-	"github.com/alswl/excalidraw-storage-backend-go/internal/store"
+	"github.com/alexberdnik/excalidraw-storage-backend-go/internal/api"
+	"github.com/alexberdnik/excalidraw-storage-backend-go/internal/config"
+	"github.com/alexberdnik/excalidraw-storage-backend-go/internal/store"
 )
 
 func testConfig(t *testing.T) config.Config {
 	t.Helper()
+	dir := t.TempDir()
 	return config.Config{
 		Port:         "0",
 		GlobalPrefix: config.DefaultGlobalPrefix,
-		SQLitePath:   filepath.Join(t.TempDir(), "test.db"),
+		Backend:      config.BackendSQLite,
+		SQLitePath:   filepath.Join(dir, "test.db"),
+		FilesPath:    filepath.Join(dir, "blobs"),
 		BodyLimit:    config.DefaultBodyLimit,
 		LogLevel:     slog.LevelError,
 	}
@@ -32,9 +36,20 @@ func testConfig(t *testing.T) config.Config {
 func newServer(t *testing.T, cfg config.Config, opts ...api.Option) *httptest.Server {
 	t.Helper()
 
-	st, err := store.Open(cfg.SQLitePath)
+	var (
+		st  store.Store
+		err error
+	)
+	switch cfg.Backend {
+	case config.BackendFiles:
+		st, err = store.OpenFiles(cfg.FilesPath)
+	case config.BackendSQLite, "":
+		st, err = store.OpenSQLite(cfg.SQLitePath)
+	default:
+		t.Fatalf("unknown backend %q", cfg.Backend)
+	}
 	if err != nil {
-		t.Fatalf("store.Open(): %v", err)
+		t.Fatalf("open store: %v", err)
 	}
 	t.Cleanup(func() {
 		if err := st.Close(); err != nil {
@@ -90,6 +105,68 @@ type idBody struct {
 type errorBody struct {
 	Message    string `json:"message"`
 	StatusCode int    `json:"statusCode"`
+}
+
+func TestFilesBackendOverHTTP(t *testing.T) {
+	cfg := testConfig(t)
+	cfg.Backend = config.BackendFiles
+	srv := newServer(t, cfg)
+
+	// scene: server generated numeric id
+	scene := []byte(`{"type":"excalidraw","elements":[]}`)
+	res, body := do(t, http.MethodPost, srv.URL+"/api/v2/scenes", scene, nil)
+	if res.StatusCode != http.StatusCreated {
+		t.Fatalf("POST /scenes status = %d, want 201 (body %s)", res.StatusCode, body)
+	}
+	var created idBody
+	decodeJSON(t, body, &created)
+
+	res, body = do(t, http.MethodGet, srv.URL+"/api/v2/scenes/"+created.ID, nil, nil)
+	if res.StatusCode != http.StatusOK || !bytes.Equal(body, scene) {
+		t.Errorf("GET /scenes/%s = %d %q, want 200 %q", created.ID, res.StatusCode, body, scene)
+	}
+
+	// room: client chosen id
+	if res, body := do(t, http.MethodPut, srv.URL+"/api/v2/rooms/abc123", []byte("room"), nil); res.StatusCode != http.StatusOK {
+		t.Fatalf("PUT /rooms/abc123 status = %d, want 200 (body %s)", res.StatusCode, body)
+	}
+
+	// file: binary payload
+	payload := make([]byte, 256)
+	for i := range payload {
+		payload[i] = byte(i)
+	}
+	if res, body := do(t, http.MethodPut, srv.URL+"/api/v2/files/image-1", payload, nil); res.StatusCode != http.StatusOK {
+		t.Fatalf("PUT /files/image-1 status = %d, want 200 (body %s)", res.StatusCode, body)
+	}
+	res, body = do(t, http.MethodGet, srv.URL+"/api/v2/files/image-1", nil, nil)
+	if res.StatusCode != http.StatusOK || !bytes.Equal(body, payload) {
+		t.Errorf("GET /files/image-1 = %d, want 200 with the uploaded bytes", res.StatusCode)
+	}
+
+	// missing key
+	res, _ = do(t, http.MethodGet, srv.URL+"/api/v2/files/nope", nil, nil)
+	if res.StatusCode != http.StatusNotFound {
+		t.Errorf("GET /files/nope status = %d, want 404", res.StatusCode)
+	}
+
+	// the blobs really are plain files: <root>/<NAMESPACE>/<last two chars>/<key>.blob
+	for _, want := range []struct {
+		path  string
+		value []byte
+	}{
+		{filepath.Join(cfg.FilesPath, "SCENES", created.ID[14:], created.ID+".blob"), scene},
+		{filepath.Join(cfg.FilesPath, "ROOMS", "23", "abc123.blob"), []byte("room")},
+		{filepath.Join(cfg.FilesPath, "FILES", "_1", "image-1.blob"), payload},
+	} {
+		got, err := os.ReadFile(want.path)
+		if err != nil {
+			t.Fatalf("read blob %q: %v", want.path, err)
+		}
+		if !bytes.Equal(got, want.value) {
+			t.Errorf("blob %q does not contain the stored bytes", want.path)
+		}
+	}
 }
 
 func TestScenesRoundTrip(t *testing.T) {

@@ -6,7 +6,7 @@ A pure Go reimplementation of
 
 It provides the HTTP storage API used by self-hosted Excalidraw for exported
 scenes, live collaboration rooms and embedded images, and persists everything
-in a single SQLite database.
+either in a single SQLite database or as plain files (`STORE_BACKEND`).
 
 ## API
 
@@ -60,14 +60,22 @@ curl -o image.png http://localhost:8080/api/v2/files/my-image
 |-----------------|-------------------------------------------------------------------|------------------------|
 | `PORT`          | HTTP listening port                                               | `8080`                 |
 | `GLOBAL_PREFIX` | Prefix for every route; set to empty to disable                   | `/api/v2`              |
-| `SQLITE_PATH`   | Path to the SQLite database file (parent directories are created) | `./data/excalidraw.db` |
+| `STORE_BACKEND` | `sqlite` (one database file) or `files` (one file per blob)       | `sqlite`               |
+| `SQLITE_PATH`   | SQLite database file, used when `STORE_BACKEND=sqlite`            | `./data/excalidraw.db` |
+| `FILES_PATH`    | Blob directory, used when `STORE_BACKEND=files`                   | `./data/blobs`         |
 | `BODY_LIMIT`    | Maximum request body size (`50mb`, `1024kb`, plain bytes, …)      | `50mb`                 |
 | `LOG_LEVEL`     | `debug`, `info`/`log`, `warn`, `error` (`verbose` = `debug`)      | `info`                 |
 
 The original `STORAGE_URI` (Keyv/Redis/Mongo/Postgres/MySQL) is intentionally
-not supported: this implementation is SQLite-only and has no in-memory mode.
+not supported: this implementation only has the two backends above and no
+in-memory mode.
 
 ## Storage
+
+`STORE_BACKEND` selects one of two interchangeable backends. The HTTP API is
+identical for both; switching backends does not migrate data.
+
+### `STORE_BACKEND=sqlite` (default)
 
 One table:
 
@@ -84,6 +92,17 @@ CREATE TABLE blobs
 The database runs in WAL mode and is written through a single connection, which
 serializes writes and avoids `SQLITE_BUSY` errors.
 
+### `STORE_BACKEND=files`
+
+Plain files, one per blob, grouped by namespace and sharded by the last two
+characters of the key:
+
+```
+<FILES_PATH>/SCENES/45/12345.blob          <- scene id 12345
+<FILES_PATH>/ROOMS/23/abc123.blob          <- room id abc123
+<FILES_PATH>/FILES/ge/myimage.blob         <- file id myimage
+```
+
 ## Build and run
 
 Requires Go 1.24+.
@@ -94,6 +113,7 @@ make test                # or: go test ./...
 make build               # -> bin/server
 
 SQLITE_PATH=/var/lib/excalidraw/db.sqlite PORT=8080 ./bin/server
+STORE_BACKEND=files FILES_PATH=/var/lib/excalidraw/blobs PORT=8080 ./bin/server
 ```
 
 ### Docker

@@ -1,4 +1,4 @@
-module github.com/alswl/excalidraw-storage-backend-go
+module github.com/alexberdnik/excalidraw-storage-backend-go
 
 go 1.24.0
 
